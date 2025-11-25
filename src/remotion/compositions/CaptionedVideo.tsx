@@ -15,8 +15,20 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
 }) => {
   const { width, height } = useVideoConfig();
   
-  // Handle video source - if it starts with /, it's already a public path
-  const videoSource = videoSrc.startsWith('/') ? staticFile(videoSrc.slice(1)) : staticFile(videoSrc);
+  // Handle video source based on environment
+  let videoSource: string;
+  
+  if (videoSrc.startsWith('http://') || videoSrc.startsWith('https://')) {
+    // Already a full URL
+    videoSource = videoSrc;
+  } else if (typeof window !== 'undefined' && window.location) {
+    // Running in browser - use absolute URL
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+    videoSource = `${baseUrl}${videoSrc}`;
+  } else {
+    // Fallback for SSR/build time
+    videoSource = videoSrc.startsWith('/') ? staticFile(videoSrc.slice(1)) : staticFile(videoSrc);
+  }
   
   return (
     <AbsoluteFill>

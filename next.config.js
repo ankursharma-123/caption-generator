@@ -22,7 +22,37 @@ const nextConfig = {
   },
   experimental: {
     serverComponentsExternalPackages: ['@google-cloud/speech', '@google-cloud/storage', 'fluent-ffmpeg']
-  }
+  },
+  async headers() {
+    return [
+      {
+        source: '/uploads/:path*',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'video/mp4',
+          },
+          {
+            key: 'Accept-Ranges',
+            value: 'bytes',
+          },
+        ],
+      },
+      {
+        source: '/renders/:path*',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'video/mp4',
+          },
+          {
+            key: 'Accept-Ranges',
+            value: 'bytes',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
