@@ -1,13 +1,13 @@
 import React from 'react';
 import { Composition, registerRoot } from 'remotion';
-import { CaptionedVideo, CaptionedVideoProps } from './compositions/CaptionedVideo';
+import { CaptionedVideo } from './compositions/CaptionedVideo';
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition<CaptionedVideoProps>
+      <Composition
         id="CaptionedVideo"
-        component={CaptionedVideo}
+        component={CaptionedVideo as any}
         durationInFrames={300}
         fps={30}
         width={1920}
@@ -15,7 +15,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={{
           videoSrc: "",
           captions: [],
-          style: "bottom-centered",
+           style: "bottom-centered" as 'bottom-centered' | 'top-bar' | 'karaoke'
         }}
       />
     </>
