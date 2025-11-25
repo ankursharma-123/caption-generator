@@ -4,27 +4,25 @@ import Head from 'next/head';
 import { Player } from '@remotion/player';
 import { CaptionedVideo } from '@/remotion/compositions/CaptionedVideo';
 import styles from '@/styles/Home.module.css';
-
-interface CaptionSegment {
-  text: string;
-  startTime: number;
-  endTime: number;
-  words?: Array<{
-    word: string;
-    startTime: number;
-    endTime: number;
-  }>;
-}
+import { 
+  API_ENDPOINTS, 
+  CAPTION_STYLES, 
+  RENDER_CONFIG, 
+  ERROR_MESSAGES 
+} from '@/lib/constants';
+import type { CaptionSegment, CaptionStyle } from '@/lib/types';
 
 export default function Home() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPath, setVideoPath] = useState<string>('');
   const [captions, setCaptions] = useState<CaptionSegment[]>([]);
-  const [selectedStyle, setSelectedStyle] = useState<'bottom-centered' | 'top-bar' | 'karaoke'>('bottom-centered');
+  const [selectedStyle, setSelectedStyle] = useState<CaptionStyle>(CAPTION_STYLES.BOTTOM_CENTERED);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [renderLoading, setRenderLoading] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
   const [renderedVideoPath, setRenderedVideoPath] = useState<string>('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,16 +32,18 @@ export default function Home() {
       setCaptions([]);
       setVideoPath('');
       setRenderedVideoPath('');
+      setUploadProgress(0);
     }
   };
 
   const handleUpload = async () => {
     if (!videoFile) {
-      setError('Please select a video file');
+      setError(ERROR_MESSAGES.SELECT_FILE_FIRST);
       return;
     }
 
     setLoading(true);
+    setUploadProgress(0);
     setStatus('Uploading video...');
     setError('');
 
@@ -51,48 +51,79 @@ export default function Home() {
     formData.append('video', videoFile);
 
     try {
-      setStatus('Processing video and extracting audio...');
-      const response = await axios.post('/api/upload', formData, {
+      const response = await axios.post(API_ENDPOINTS.UPLOAD, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            // Upload is typically 0-70%, then processing takes 70-100%
+            const percentCompleted = Math.round((progressEvent.loaded * 70) / progressEvent.total);
+            setUploadProgress(percentCompleted);
+            
+            if (percentCompleted >= 70) {
+              setStatus('Processing video and generating captions...');
+            }
+          }
+        },
       });
 
+      setUploadProgress(100);
       setVideoPath(response.data.videoPath);
       setCaptions(response.data.captions);
       setStatus('Captions generated successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.details || 'Failed to process video');
+      setError(err.response?.data?.details || ERROR_MESSAGES.UPLOAD_FAILED);
       setStatus('');
+      setUploadProgress(0);
     } finally {
       setLoading(false);
+      setTimeout(() => setUploadProgress(0), 2000);
     }
   };
 
   const handleRender = async () => {
     if (!videoPath || !captions || captions.length === 0) {
-      setError('Please generate captions first');
+      setError(ERROR_MESSAGES.GENERATE_CAPTIONS_FIRST);
       return;
     }
 
     setRenderLoading(true);
-    setStatus('Rendering video with captions...');
+    setRenderProgress(0);
+    setStatus('');
     setError('');
 
+    // Poll for progress
+    const progressInterval = setInterval(async () => {
+      try {
+        const progressResponse = await axios.get(API_ENDPOINTS.RENDER_PROGRESS);
+        if (progressResponse.data.progress !== undefined) {
+          setRenderProgress(progressResponse.data.progress);
+        }
+      } catch (err) {
+        // Ignore errors during progress polling
+      }
+    }, RENDER_CONFIG.PROGRESS_POLL_INTERVAL_MS);
+
     try {
-      const response = await axios.post('/api/render', {
+      const response = await axios.post(API_ENDPOINTS.RENDER, {
         videoPath,
         captions,
         style: selectedStyle,
       });
 
+      clearInterval(progressInterval);
+      setRenderProgress(100);
       setRenderedVideoPath(response.data.outputPath);
       setStatus('Video rendered successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.details || 'Failed to render video');
+      clearInterval(progressInterval);
+      setError(err.response?.data?.details || ERROR_MESSAGES.RENDER_FAILED);
       setStatus('');
+      setRenderProgress(0);
     } finally {
       setRenderLoading(false);
+      setTimeout(() => setRenderProgress(0), RENDER_CONFIG.PROGRESS_RESET_DELAY_MS);
     }
   };
 
@@ -137,6 +168,22 @@ export default function Home() {
           </button>
         </div>
 
+        {loading && uploadProgress > 0 && (
+          <div className={styles.progressContainer}>
+            <div className={styles.progressBar}>
+              <div 
+                className={styles.progressFill} 
+                style={{ width: `${uploadProgress}%` }}
+              >
+                <span className={styles.progressText}>{uploadProgress.toFixed(0)}%</span>
+              </div>
+            </div>
+            <p className={styles.progressLabel}>
+              {uploadProgress < 70 ? 'Uploading video...' : 'Processing and generating captions...'}
+            </p>
+          </div>
+        )}
+
         {status && <p className={styles.status}>{status}</p>}
         {error && <p className={styles.error}>{error}</p>}
 
@@ -158,20 +205,20 @@ export default function Home() {
               <h3>Select Caption Style:</h3>
               <div className={styles.styleButtons}>
                 <button
-                  onClick={() => setSelectedStyle('bottom-centered')}
-                  className={`${styles.styleButton} ${selectedStyle === 'bottom-centered' ? styles.active : ''}`}
+                  onClick={() => setSelectedStyle(CAPTION_STYLES.BOTTOM_CENTERED)}
+                  className={`${styles.styleButton} ${selectedStyle === CAPTION_STYLES.BOTTOM_CENTERED ? styles.active : ''}`}
                 >
                   Bottom Centered
                 </button>
                 <button
-                  onClick={() => setSelectedStyle('top-bar')}
-                  className={`${styles.styleButton} ${selectedStyle === 'top-bar' ? styles.active : ''}`}
+                  onClick={() => setSelectedStyle(CAPTION_STYLES.TOP_BAR)}
+                  className={`${styles.styleButton} ${selectedStyle === CAPTION_STYLES.TOP_BAR ? styles.active : ''}`}
                 >
                   Top Bar
                 </button>
                 <button
-                  onClick={() => setSelectedStyle('karaoke')}
-                  className={`${styles.styleButton} ${selectedStyle === 'karaoke' ? styles.active : ''}`}
+                  onClick={() => setSelectedStyle(CAPTION_STYLES.KARAOKE)}
+                  className={`${styles.styleButton} ${selectedStyle === CAPTION_STYLES.KARAOKE ? styles.active : ''}`}
                 >
                   Karaoke Style
                 </button>
@@ -209,6 +256,20 @@ export default function Home() {
             >
               {renderLoading ? 'Rendering...' : 'Export Video'}
             </button>
+
+            {renderLoading && (
+              <div className={styles.progressContainer}>
+                <div className={styles.progressBar}>
+                  <div 
+                    className={styles.progressFill} 
+                    style={{ width: `${renderProgress}%` }}
+                  >
+                    <span className={styles.progressText}>{renderProgress.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <p className={styles.progressLabel}>Rendering video with captions...</p>
+              </div>
+            )}
 
             {renderedVideoPath && (
               <div className={styles.downloadSection}>

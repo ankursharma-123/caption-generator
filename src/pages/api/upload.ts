@@ -1,29 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { transcribeAudio, extractAudioFromVideo } from '@/services/speechToText';
-import * as fs from 'fs';
-import * as path from 'path';
 import multer from 'multer';
-import { promisify } from 'util';
+import path from 'path';
+import { runMiddleware, unlinkAsync } from '@/lib/middleware';
+import { isFFmpegInstalled, validateGoogleCloudConfig } from '@/lib/validation';
+import { ERROR_MESSAGES, FILE_CONFIG, PATHS } from '@/lib/constants';
+import type { UploadResponse, ErrorResponse } from '@/lib/types';
 
-const unlinkAsync = promisify(fs.unlink);
-
+// Configure multer for file uploads
 const upload = multer({
-  dest: './public/uploads/',
-  limits: { fileSize: 100 * 1024 * 1024 },
+  dest: `./${PATHS.UPLOADS_DIR}/`,
+  limits: { fileSize: FILE_CONFIG.MAX_UPLOAD_SIZE_MB * 1024 * 1024 },
 });
 
 const uploadMiddleware = upload.single('video');
-
-function runMiddleware(req: any, res: any, fn: any) {
-  return new Promise((resolve, reject) => {
-    fn(req, res, (result: any) => {
-      if (result instanceof Error) {
-        return reject(result);
-      }
-      return resolve(result);
-    });
-  });
-}
 
 export const config = {
   api: {
@@ -31,69 +21,67 @@ export const config = {
   },
 };
 
+/**
+ * POST /api/upload
+ * Uploads a video, extracts audio, and generates captions using Google Cloud Speech-to-Text
+ */
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<UploadResponse | ErrorResponse>
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: ERROR_MESSAGES.METHOD_NOT_ALLOWED });
   }
 
   try {
-    // Check FFmpeg availability first
-    const { execSync } = require('child_process');
-    try {
-      execSync('ffmpeg -version', { stdio: 'ignore' });
-    } catch (e) {
+    // Validate FFmpeg installation
+    if (!isFFmpegInstalled()) {
       return res.status(500).json({
-        error: 'FFmpeg not installed',
+        error: ERROR_MESSAGES.FFMPEG_NOT_INSTALLED,
         details: 'FFmpeg is required to extract audio from video. Please install FFmpeg from https://ffmpeg.org or run: choco install ffmpeg',
       });
     }
 
-    // Check Google Cloud configuration
-    if (!process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT_ID === 'your-project-id') {
+    // Validate Google Cloud configuration
+    const gcpValidation = validateGoogleCloudConfig();
+    if (!gcpValidation.isValid) {
       return res.status(500).json({
-        error: 'Google Cloud not configured',
-        details: 'Please set GOOGLE_CLOUD_PROJECT_ID in your .env file with your actual Google Cloud Project ID',
+        error: gcpValidation.error!,
+        details: gcpValidation.details,
       });
     }
 
-    if (!process.env.GOOGLE_CLOUD_BUCKET_NAME) {
-      return res.status(500).json({
-        error: 'Google Cloud Storage not configured',
-        details: 'Please set GOOGLE_CLOUD_BUCKET_NAME in your .env file with your bucket name',
-      });
-    }
-
+    // Handle file upload
     await runMiddleware(req, res, uploadMiddleware);
 
     const file = (req as any).file;
-    
     if (!file) {
-      return res.status(400).json({ error: 'No video file uploaded' });
+      return res.status(400).json({ error: ERROR_MESSAGES.NO_FILE_UPLOADED });
     }
 
     const videoPath = file.path;
-    const audioPath = path.join('./public/uploads/', `${file.filename}.mp3`);
+    const audioPath = path.join(`./${PATHS.UPLOADS_DIR}/`, `${file.filename}.mp3`);
 
+    // Extract audio from video
     console.log('Extracting audio from video...');
     await extractAudioFromVideo(videoPath, audioPath);
 
+    // Transcribe audio to generate captions
     console.log('Transcribing audio...');
     const captions = await transcribeAudio(audioPath);
 
+    // Clean up temporary audio file
     await unlinkAsync(audioPath);
 
     res.status(200).json({
       success: true,
       videoPath: `/uploads/${file.filename}`,
-      captions: captions,
+      captions,
     });
   } catch (error: any) {
     console.error('Error processing video:', error);
     res.status(500).json({
-      error: 'Failed to process video',
+      error: ERROR_MESSAGES.UPLOAD_FAILED,
       details: error.message,
     });
   }
