@@ -2,7 +2,7 @@ import React from 'react';
 import { AbsoluteFill, Video, staticFile, useVideoConfig } from 'remotion';
 import { Captions, CaptionSegment } from './Captions';
 
-interface CaptionedVideoProps {
+export interface CaptionedVideoProps {
   videoSrc: string;
   captions: CaptionSegment[];
   style: 'bottom-centered' | 'top-bar' | 'karaoke';

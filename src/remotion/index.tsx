@@ -20,7 +20,7 @@ interface CaptionedVideoProps {
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition
+      <Composition<CaptionedVideoProps>
         id="CaptionedVideo"
         component={CaptionedVideo}
         durationInFrames={300}

@@ -10,13 +10,13 @@ import {
   RENDER_CONFIG, 
   ERROR_MESSAGES 
 } from '@/lib/constants';
-import type { CaptionSegment, CaptionStyle } from '@/lib/types';
+import type { CaptionSegment } from '@/lib/types';
 
 export default function Home() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPath, setVideoPath] = useState<string>('');
   const [captions, setCaptions] = useState<CaptionSegment[]>([]);
-  const [selectedStyle, setSelectedStyle] = useState<CaptionStyle>(CAPTION_STYLES.BOTTOM_CENTERED);
+  const [selectedStyle, setSelectedStyle] = useState<(typeof CAPTION_STYLES)[keyof typeof CAPTION_STYLES]>(CAPTION_STYLES.BOTTOM_CENTERED);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [status, setStatus] = useState<string>('');
