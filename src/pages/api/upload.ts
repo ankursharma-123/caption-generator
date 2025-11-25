@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import { runMiddleware, unlinkAsync } from '@/lib/middleware';
 import { isFFmpegInstalled, validateGoogleCloudConfig } from '@/lib/validation';
+import { initializeGoogleCredentials } from '@/lib/credentials';
 import { ERROR_MESSAGES, FILE_CONFIG, PATHS } from '@/lib/constants';
 import type { UploadResponse, ErrorResponse } from '@/lib/types';
 
@@ -34,6 +35,9 @@ export default async function handler(
   }
 
   try {
+    // Initialize Google Cloud credentials (for Vercel deployment)
+    initializeGoogleCredentials();
+
     // Validate FFmpeg installation
     if (!isFFmpegInstalled()) {
       return res.status(500).json({

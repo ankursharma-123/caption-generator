@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 3008,
+      "maxDuration": 60
+    }
+  },
+  "regions": ["iad1"],
+  "env": {
+    "GOOGLE_CLOUD_PROJECT_ID": "@google_cloud_project_id",
+    "GOOGLE_CLOUD_BUCKET_NAME": "@google_cloud_bucket_name",
+    "GOOGLE_CREDENTIALS_BASE64": "@google_credentials_base64"
+  }
+}
